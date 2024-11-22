@@ -130,6 +130,21 @@ func (c *Client) search(uid bool, criteria *imap.SearchCriteria) (ids []uint32, 
 	return
 }
 
+func (c *Client) searchNoUSASCII(uid bool, criteria *imap.SearchCriteria) (ids []uint32, err error) {
+	charset := "UTF-8"
+	if c.utf8SearchUnsupported {
+		charset = ""
+	}
+	ids, status, err := c.executeSearch(uid, criteria, charset)
+	if status != nil &&
+		(status.Code == imap.CodeBadCharset || // Some servers don't support UTF-8
+			status.Type == imap.StatusRespBad) { // Some servers don't even support CHARSET within COMMAND
+		ids, _, err = c.executeSearch(uid, criteria, "")
+		c.utf8SearchUnsupported = true
+	}
+	return
+}
+
 // Search searches the mailbox for messages that match the given searching
 // criteria. Searching criteria consist of one or more search keys. The response
 // contains a list of message sequence IDs corresponding to those messages that
@@ -139,6 +154,9 @@ func (c *Client) search(uid bool, criteria *imap.SearchCriteria) (ids []uint32, 
 // searching criteria. When no criteria has been set, all messages in the mailbox
 // will be searched using ALL criteria.
 func (c *Client) Search(criteria *imap.SearchCriteria) (seqNums []uint32, err error) {
+	if c.NoUSASCII {
+		return c.searchNoUSASCII(false, criteria)
+	}
 	return c.search(false, criteria)
 }
 
